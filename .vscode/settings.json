@@ -1,0 +1,16 @@
+{
+    "python.languageServer": "None",
+    "editor.formatOnSave": true,
+    // Use Ruff for linting and formatting
+    "ruff.enable": true,
+    "editor.codeActionsOnSave": {
+        "source.fixAll.ruff": "always",
+    },
+    // Optional: Make Ruff your formatter instead of Black
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff"
+    },
+    "cSpell.words": [
+        "cmdstore"
+    ]
+}
