@@ -11,9 +11,11 @@ from pathlib import Path
 
 import pyperclip
 
+GLOBAL_CONFIG_PATH = Path("~/.cmdstore_config.json").expanduser()
+
 
 class CommandStore:
-    def __init__(self, store_path="~/dotfiles/.cmdstore"):
+    def __init__(self, store_path="~/.cmdstore"):
         self.store_path = Path(store_path).expanduser()
         self.store_file = self.store_path / "commands.json"
         self.config_file = self.store_path / "config.json"
@@ -158,6 +160,28 @@ class CommandStore:
             if result.returncode == 0:
                 selected = result.stdout.strip()
                 cmd_id = selected.split("id: ")[-1].strip()
+                cmd_to_delete = next((c for c in commands if c["id"] == cmd_id), None)
+                if not cmd_to_delete:
+                    print("Selected command not found.")
+                    return
+
+                command = cmd_to_delete.get("command", "")
+                description = cmd_to_delete.get("description", "")
+                tags = ", ".join(cmd_to_delete.get("tags", []))
+                tool = cmd_to_delete.get("tool", "general")
+
+                print("\nSelected command for deletion:")
+                print(f"  Command: {command}")
+                if description:
+                    print(f"  Description: {description}")
+                if tags:
+                    print(f"  Tags: {tags}")
+                print(f"  Tool: {tool}")
+
+                confirmation = input("Delete this command? [Y/n]: ").strip().lower()
+                if confirmation not in ("", "y", "yes"):
+                    print("Deletion cancelled.")
+                    return
 
                 # Remove command
                 commands = [c for c in commands if c["id"] != cmd_id]
@@ -226,14 +250,47 @@ class CommandStore:
             print("Error: fzf not found.")
 
 
+def _load_global_store_path():
+    """Load the globally configured default store path, if any."""
+    if GLOBAL_CONFIG_PATH.exists():
+        try:
+            with open(GLOBAL_CONFIG_PATH) as f:
+                cfg = json.load(f)
+            store = cfg.get("store")
+            if isinstance(store, str) and store.strip():
+                return store
+        except json.JSONDecodeError:
+            return None
+    return None
+
+
+def _save_global_store_path(path: str):
+    """Persistently set the global default store path."""
+    GLOBAL_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(GLOBAL_CONFIG_PATH, "w") as f:
+        json.dump({"store": path}, f, indent=2)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Command storage with fuzzy finding")
+    parser.add_argument(
+        "--store",
+        default=None,
+        help="Override store directory for this invocation",
+    )
+    parser.add_argument(
+        "--set-store",
+        dest="set_store",
+        default=None,
+        help="Persistently set the default store directory",
+    )
     subparsers = parser.add_subparsers(dest="action", help="Commands")
-    subparsers.required = True
+    # Make subparsers optional - we'll handle --set-store case separately
+    subparsers.required = False
 
     # Add command
     add_parser = subparsers.add_parser("add", help="Add a new command")
-    add_parser.add_argument("cmd", help="The command to store")
+    add_parser.add_argument("cmd", nargs="?", help="The command to store")
     add_parser.add_argument("-d", "--description", default="", help="Command description")
     add_parser.add_argument("-t", "--tags", nargs="+", default=[], help="Tags for the command")
     add_parser.add_argument("--tool", default="", help="Tool category (npm, uv, node, etc.)")
@@ -257,10 +314,43 @@ def main():
 
     args = parser.parse_args()
 
-    store = CommandStore()
+    # Handle --set-store as a special case that doesn't require an action
+    if args.set_store:
+        _save_global_store_path(args.set_store)
+        print(f"✓ Default store path set to: {args.set_store}")
+        return  # Exit early after setting the store path
+
+    # If no action provided and --set-store wasn't used, show error
+    if not args.action:
+        parser.error("the following arguments are required: action")
+
+    # Determine effective store path
+    effective_store = args.store or _load_global_store_path() or "~/.cmdstore"
+
+    store = CommandStore(store_path=effective_store)
 
     if args.action == "add":
-        store.add_command(args.cmd, args.description, args.tags, args.tool)
+        command = args.cmd
+        description = args.description
+        tags = args.tags
+        tool = args.tool
+
+        if not command:
+            print("Enter command details (leave blank to skip optional fields):")
+            while True:
+                command = input("Command: ").strip()
+                if command:
+                    break
+                print("Command is required.")
+            if not description:
+                description = input("Description: ").strip()
+            if not tags:
+                tags_input = input("Tags (comma-separated): ").strip()
+                tags = [tag.strip() for tag in tags_input.split(",") if tag.strip()]
+            if not tool:
+                tool = input("Tool: ").strip()
+
+        store.add_command(command, description, tags, tool)
     elif args.action == "search":
         store.search_commands(tool_filter=args.tool, tag_filter=args.tag)
     elif args.action == "delete":
