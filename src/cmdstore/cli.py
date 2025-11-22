@@ -1,15 +1,31 @@
 """Command-line interface for cmdstore."""
 
 import argparse
+from importlib.metadata import PackageNotFoundError, version
 
 from cmdstore.colors import Colors, style_error, style_info, style_prompt, style_success
 from cmdstore.config import load_global_store_path, save_global_store_path
 from cmdstore.store import CommandStore
 
+try:
+    __version__ = version("cmdstore")
+except PackageNotFoundError:
+    # Fallback to __init__.py version if package not installed
+    try:
+        from cmdstore import __version__
+    except ImportError:
+        __version__ = "unknown"
+
 
 def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(description="Command storage with fuzzy finding")
+    parser.add_argument(
+        "--version",
+        "-v",
+        action="version",
+        version=f"%(prog)s {__version__}",
+    )
     parser.add_argument(
         "--store",
         default=None,
@@ -97,4 +113,3 @@ def main():
         store.list_commands(tool_filter=args.tool)
     elif args.action == "import":
         store.import_from_history(args.file, args.limit)
-
