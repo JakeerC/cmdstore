@@ -13,6 +13,7 @@ from cmdstore.fzf_integration import (
     extract_command_id,
     format_commands_for_fzf,
     run_fzf_multi_select,
+    run_fzf_multi_select_with_preview,
     run_fzf_search,
 )
 
@@ -136,7 +137,7 @@ class CommandStore:
         self._save_commands(commands)
 
     def delete_command(self):
-        """Delete a command using fzf selection"""
+        """Delete one or more commands using fzf multi-select"""
         commands = self._load_commands()
 
         if not commands:
@@ -146,47 +147,65 @@ class CommandStore:
         # Format commands for fzf (same format as search for preview compatibility)
         fzf_input = format_commands_for_fzf(commands)
 
-        # Run fzf with preview
-        prompt = f"{Colors.BOLD}{Colors.RED}Delete » {Colors.RESET}"
-        selected = run_fzf_search(fzf_input, self.store_file, prompt, preview=True)
+        # Run fzf with multi-select and preview
+        prompt = f"{Colors.BOLD}{Colors.RED}Delete (Tab to select multiple) » {Colors.RESET}"
+        selected_lines = run_fzf_multi_select_with_preview(
+            fzf_input, self.store_file, prompt, preview=True
+        )
 
-        if selected is None:
+        if selected_lines is None:
             print(style_error("Error: fzf not found."))
             return
 
-        cmd_id = extract_command_id(selected)
-        if not cmd_id:
-            print(style_error("Could not parse command ID from selection."))
+        if not selected_lines:
+            print(style_info("No commands selected. Deletion cancelled."))
             return
 
-        cmd_to_delete = next((c for c in commands if c["id"] == cmd_id), None)
-        if not cmd_to_delete:
-            print(style_error("Selected command not found."))
+        # Extract command IDs from selected lines
+        cmd_ids = []
+        for selected in selected_lines:
+            cmd_id = extract_command_id(selected)
+            if cmd_id:
+                cmd_ids.append(cmd_id)
+
+        if not cmd_ids:
+            print(style_error("Could not parse command IDs from selection."))
             return
 
-        command = cmd_to_delete.get("command", "")
-        description = cmd_to_delete.get("description", "")
-        tags = ", ".join(cmd_to_delete.get("tags", []))
-        tool = cmd_to_delete.get("tool", "general")
+        # Get commands to delete
+        commands_to_delete = [c for c in commands if c["id"] in cmd_ids]
 
-        print(f"\n{style_info('Selected command for deletion:')}")
-        print(f"  {style_prompt('Command:', Colors.CYAN)} {command}")
-        if description:
-            print(f"  {style_prompt('Description:', Colors.YELLOW)} {description}")
-        if tags:
-            print(f"  {style_prompt('Tags:', Colors.MAGENTA)} {tags}")
-        print(f"  {style_prompt('Tool:', Colors.BLUE)} {tool}")
+        if not commands_to_delete:
+            print(style_error("Selected commands not found."))
+            return
 
-        prompt_text = style_prompt("Delete this command? [Y/n]:", Colors.RED)
+        # Display summary of commands to be deleted
+        print(f"\n{style_info(f'Selected {len(commands_to_delete)} command(s) for deletion:')}")
+        for idx, cmd in enumerate(commands_to_delete, 1):
+            command = cmd.get("command", "")
+            description = cmd.get("description", "")
+            tags = ", ".join(cmd.get("tags", []))
+            tool = cmd.get("tool", "general")
+
+            print(f"\n  {idx}. {style_prompt('Command:', Colors.CYAN)} {command}")
+            if description:
+                print(f"     {style_prompt('Description:', Colors.YELLOW)} {description}")
+            if tags:
+                print(f"     {style_prompt('Tags:', Colors.MAGENTA)} {tags}")
+            print(f"     {style_prompt('Tool:', Colors.BLUE)} {tool}")
+
+        prompt_text = style_prompt(
+            f"\nDelete {len(commands_to_delete)} command(s)? [Y/n]:", Colors.RED
+        )
         confirmation = input(f"{prompt_text} ").strip().lower()
         if confirmation not in ("", "y", "yes"):
             print(style_info("Deletion cancelled."))
             return
 
-        # Remove command
-        commands = [c for c in commands if c["id"] != cmd_id]
+        # Remove all selected commands
+        commands = [c for c in commands if c["id"] not in cmd_ids]
         self._save_commands(commands)
-        print(style_success("✓ Command deleted"))
+        print(style_success(f"✓ Deleted {len(commands_to_delete)} command(s)"))
 
     def list_commands(self, tool_filter=None):
         """List all commands"""

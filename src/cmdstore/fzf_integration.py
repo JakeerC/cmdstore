@@ -185,6 +185,73 @@ def run_fzf_multi_select(fzf_input: list[str]) -> list[str] | None:
         return None
 
 
+def run_fzf_multi_select_with_preview(
+    fzf_input: list[str],
+    store_file: Path,
+    prompt: str,
+    preview: bool = True,
+) -> list[str] | None:
+    """Run fzf with multi-select and preview, returning selected lines."""
+    preview_script_path = None
+    try:
+        if preview:
+            preview_script_path = create_preview_script()
+            preview_script = f"python3 {shlex.quote(preview_script_path)} {{}}"
+        else:
+            preview_script = None
+
+        # Prepare fzf command with multi-select
+        fzf_cmd = [
+            "fzf",
+            "--multi",
+            "--height",
+            FZF_PREVIEW_WIDTH,
+            "--reverse",
+            "--border",
+            "--prompt",
+            prompt,
+        ]
+
+        if preview and preview_script:
+            fzf_cmd.extend(
+                [
+                    "--preview",
+                    preview_script,
+                    "--preview-window",
+                    f"right:{FZF_PREVIEW_WIDTH}:border-left",
+                ]
+            )
+
+        # Pass store file path via environment variable
+        env = os.environ.copy()
+        env["CMDSTORE_STORE_FILE"] = str(store_file)
+
+        result = subprocess.run(
+            fzf_cmd,
+            input="\n".join(fzf_input),
+            text=True,
+            capture_output=True,
+            env=env,
+        )
+
+        if result.returncode == 0:
+            selected_lines = result.stdout.strip()
+            if selected_lines:
+                return selected_lines.split("\n")
+            return []
+        return None
+    except FileNotFoundError:
+        return None
+    finally:
+        # Clean up temporary preview script file
+        if preview_script_path:
+            try:
+                if os.path.exists(preview_script_path):
+                    os.unlink(preview_script_path)
+            except Exception:
+                pass  # Ignore cleanup errors
+
+
 def extract_command_id(selected_line: str) -> str | None:
     """Extract command ID from fzf selected line."""
     if "id: " in selected_line:
@@ -197,4 +264,3 @@ def extract_command_from_selection(selected_line: str) -> str:
     if f" {FZF_PREVIEW_DELIMITER} id: " in selected_line:
         return selected_line.rsplit(f" {FZF_PREVIEW_DELIMITER} id: ", 1)[0].strip()
     return selected_line
-
