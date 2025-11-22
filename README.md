@@ -1,66 +1,91 @@
-# cmdstore - Setup Guide
+# cmdstore
+
+A CLI tool to store and retrieve commands with fuzzy finding using `fzf`. Quickly save, search, and reuse your frequently used commands with rich metadata support.
+
+## Features
+
+- 🎯 **Fuzzy Search**: Interactive command search with `fzf` and live preview
+- 📋 **Auto-copy**: Selected commands are automatically copied to clipboard
+- 🏷️ **Metadata**: Organize commands with descriptions, tags, and tool categories
+- 📊 **Usage Tracking**: Commands track how many times they've been used
+- 🗑️ **Multi-select Delete**: Select and delete multiple commands at once
+- 📥 **History Import**: Import commands from your shell history
+- ⚙️ **Flexible Storage**: Configure custom store locations globally or per-command
 
 ## Installation
 
-### 1. Install Dependencies
+### Prerequisites
 
+- Python 3.12 or higher
+- `fzf` (fuzzy finder) - [Installation guide](https://github.com/junegunn/fzf#installation)
+
+### Install cmdstore
+
+Using `uv` (recommended):
 ```bash
-uv add pyperclip
+uv pip install cmdstore
 ```
 
-### 2. Setup the Script
-
+Or using `pip`:
 ```bash
-# Make the script executable
-chmod +x cmdstore.py
-
-# Create a symlink to use it globally (optional)
-sudo ln -s $(pwd)/cmdstore.py /usr/local/bin/cmdstore
-
-# Or add an alias to your .bashrc/.zshrc
-echo "alias cmdstore='python3 /path/to/cmdstore.py'" >> ~/.zshrc
+pip install cmdstore
 ```
 
-### 3. Storage Location
-
-By default cmdstore keeps its data under `~/.cmdstore/`.
-
-**Permanently change the default store location:**
+Or install from source:
 ```bash
-cmdstore --set-store ~/dotfiles/.cmdstore
+git clone <repository-url>
+cd cmdstore
+uv pip install -e .
 ```
 
-This will set the default for all future invocations. The configuration is saved to `~/.cmdstore_config.json`.
+## Quick Start
 
-**Override the store location for a single command:**
 ```bash
-cmdstore --store ~/dotfiles/.cmdstore add "npm run build"
-```
+# Add your first command
+cmdstore add "npm run dev" -d "Start development server" -t npm dev --tool npm
 
-The `--store` flag takes precedence over the persistent default set by `--set-store`.
+# Search and use commands
+cmdstore search
+
+# List all commands
+cmdstore list
+```
 
 ## Usage
 
 ### Add a Command
+
+Add commands with optional metadata:
+
 ```bash
-# Basic add
+# Basic add (interactive prompts for all fields)
+cmdstore add
+
+# Add with command only
 cmdstore add "npm install -D tailwindcss"
 
-# With description and tags
-cmdstore add "npm install -D tailwindcss" -d "Install Tailwind as dev dependency" -t npm tailwind setup --tool npm
+# Add with all metadata
+cmdstore add "npm install -D tailwindcss" \
+  -d "Install Tailwind as dev dependency" \
+  -t npm tailwind setup --tool npm
 
-# Interactive example
-cmdstore add "uv venv" -d "Create virtual environment with uv" -t python uv venv --tool uv
-
-# Prompt for everything (no args)
-cmdstore add
+# Add Python command
+cmdstore add "uv venv" \
+  -d "Create virtual environment with uv" \
+  -t python uv venv --tool uv
 ```
 
-Running `cmdstore add` with no arguments launches an interactive prompt for the command, description, tags, and tool fields.
+**Command Options:**
+- `-d, --description`: Command description
+- `-t, --tags`: Space-separated tags for categorization
+- `--tool`: Tool category (npm, uv, node, git, etc.)
 
 ### Search Commands
+
+Search commands with `fzf` and preview details:
+
 ```bash
-# Search all commands (opens fzf)
+# Search all commands (opens fzf with preview)
 cmdstore search
 
 # Filter by tool
@@ -70,59 +95,150 @@ cmdstore search --tool npm
 cmdstore search --tag python
 ```
 
+**Search Features:**
+- Interactive fuzzy search with `fzf`
+- Live preview showing command details, description, tags, tool, and usage count
+- Selected command is automatically copied to clipboard
+- Usage count is incremented when a command is selected
+
 ### List Commands
+
+Display all commands in a readable format:
+
 ```bash
-# List all
+# List all commands
 cmdstore list
 
-# List by tool
+# List commands by tool
 cmdstore list --tool npm
 ```
 
-### Delete Command
+### Delete Commands
+
+Delete one or more commands with multi-select:
+
 ```bash
 cmdstore delete
-# Opens fzf to select a command to delete, then asks for confirmation
 ```
 
+**Delete Features:**
+- Opens `fzf` with multi-select mode (use `Tab` to select multiple)
+- Preview pane shows full command details
+- Confirmation prompt before deletion
+- Can delete multiple commands in one operation
+
 ### Import from History
+
+Import commands from your shell history:
+
 ```bash
-# Import from bash history (default last 100 commands)
+# Import from bash history (default: last 100 commands)
 cmdstore import
 
 # Import from zsh history
 cmdstore import --file ~/.zsh_history --limit 200
+
+# Import from custom history file
+cmdstore import --file ~/.fish_history --limit 50
 ```
+
+**Import Options:**
+- `--file`: Path to history file (default: `~/.bash_history`)
+- `--limit`: Number of recent commands to consider (default: 100)
+
+## Configuration
+
+### Store Location
+
+By default, cmdstore stores data in `~/.cmdstore/`.
+
+**Set a persistent default store location:**
+```bash
+cmdstore --set-store ~/dotfiles/.cmdstore
+```
+
+This saves the configuration to `~/.cmdstore_config.json` and will be used for all future invocations.
+
+**Override store location for a single command:**
+```bash
+cmdstore --store ~/dotfiles/.cmdstore add "npm run build"
+```
+
+The `--store` flag takes precedence over the persistent default.
+
+**Priority order:**
+1. `--store` flag (highest priority)
+2. Global config from `~/.cmdstore_config.json`
+3. Default `~/.cmdstore` (lowest priority)
 
 ## File Structure
 
 ```
 ~/.cmdstore/
-├── commands.json    # All stored commands
-└── config.json      # Configuration
+├── commands.json    # All stored commands with metadata
+└── config.json      # Local store configuration
 
 ~/.cmdstore_config.json  # Global default store path configuration
+```
+
+### Command Data Format
+
+Each command is stored with the following structure:
+
+```json
+{
+  "id": "uuid",
+  "command": "npm run dev",
+  "description": "Start development server",
+  "tags": ["npm", "dev"],
+  "tool": "npm",
+  "created_at": "2024-01-01T12:00:00",
+  "used_count": 5
+}
 ```
 
 ## Example Workflow
 
 ```bash
-# Add some commands
+# 1. Add some frequently used commands
 cmdstore add "npm run dev" -d "Start dev server" -t npm dev --tool npm
 cmdstore add "uv pip install -r requirements.txt" -t python uv --tool uv
 cmdstore add "nvim ~/.config/nvim/init.lua" -d "Edit neovim config" -t neovim config --tool neovim
 
-# Search and copy to clipboard
+# 2. Search and use commands
 cmdstore search --tool npm
-# Select with fzf, automatically copies to clipboard
+# Select with fzf, command is automatically copied to clipboard
 
-# Paste with Ctrl+V
+# 3. Paste with Ctrl+V (or Cmd+V on macOS)
+
+# 4. Import commands from history
+cmdstore import --file ~/.zsh_history --limit 200
+
+# 5. Clean up old commands
+cmdstore delete
+# Use Tab to select multiple, then confirm deletion
 ```
 
 ## Tips
 
-- Keep the script in your dotfiles repo for version control
-- The `~/.cmdstore/` directory contains your command database (or whichever path you set via `--set-store` or pass via `--store`)
-- Use `--set-store` to permanently configure a custom location (e.g., `~/dotfiles/.cmdstore` for version control)
-- The persistent store path is saved in `~/.cmdstore_config.json`
-- Use `--store` to temporarily override the default for a single command
+- **Version Control**: Use `--set-store` to point to a directory in your dotfiles repo for version control
+- **Organization**: Use consistent tags and tools for better searchability
+- **History Import**: Regularly import from your shell history to build your command library
+- **Multi-select Delete**: Use `Tab` in fzf to select multiple commands for batch deletion
+- **Preview**: The fzf preview pane shows full command details - use it to verify before selecting
+
+## Requirements
+
+- Python 3.12+
+- `fzf` (fuzzy finder)
+- `pyperclip` (automatically installed as dependency)
+
+## License
+
+MIT License
+
+Copyright (c) 2025 Jakeer
+
+## Contributing
+
+[Add contribution guidelines here]
