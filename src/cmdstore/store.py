@@ -112,7 +112,7 @@ class CommandStore:
             # Get the full command from store to ensure we have the complete command
             commands = self._load_commands()
             full_cmd = next((c for c in commands if c["id"] == cmd_id), None)
-            if full_cmd:
+            if full_cmd:  # noqa: SIM108
                 command = full_cmd["command"]
             else:
                 # Fallback: if command not found, extract from selection
@@ -143,17 +143,12 @@ class CommandStore:
             print(style_error("No commands to delete."))
             return
 
-        # Format commands for fzf
-        fzf_input = []
-        for cmd in commands:
-            tags_str = ", ".join(cmd.get("tags", []))
-            tool_str = f"[{cmd.get('tool', 'general')}]"
-            line = f"{cmd['command']} | {tool_str} | tags: {tags_str} | id: {cmd['id']}"
-            fzf_input.append(line)
+        # Format commands for fzf (same format as search for preview compatibility)
+        fzf_input = format_commands_for_fzf(commands)
 
-        # Run fzf
+        # Run fzf with preview
         prompt = f"{Colors.BOLD}{Colors.RED}Delete » {Colors.RESET}"
-        selected = run_fzf_search(fzf_input, self.store_file, prompt, preview=False)
+        selected = run_fzf_search(fzf_input, self.store_file, prompt, preview=True)
 
         if selected is None:
             print(style_error("Error: fzf not found."))
@@ -245,4 +240,3 @@ class CommandStore:
             if cmd:
                 self.add_command(cmd, description="Imported from history")
         print(style_success(f"✓ Imported {len(selected)} commands"))
-
