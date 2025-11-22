@@ -7,7 +7,7 @@ import tempfile
 from pathlib import Path
 
 FZF_PREVIEW_WIDTH = "50%"
-FZF_PREVIEW_DELIMITER = "■"
+FZF_PREVIEW_DELIMITER = "║"  # ║ , ■ , ¤ , █
 
 
 def generate_preview_script() -> str:

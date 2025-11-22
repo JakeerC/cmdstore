@@ -1,6 +1,6 @@
 [project]
 name = "cmdstore"
-version = "0.1.0"
+version = "0.3.0"
 description = "A CLI tool to store and retrieve commands with fuzzy finding"
 readme = "README.md"
 requires-python = ">=3.12"
