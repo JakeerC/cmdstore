@@ -1,3 +1,8 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/JakeerC/cmdstore/main/assets/cmdstore_logo.png" alt="cmdstore logo" width="220" />
+</p>
+
+
 # cmdstore
 
 A CLI tool to store and retrieve commands with fuzzy finding using `fzf`. Quickly save, search, and reuse your frequently used commands with rich metadata support.
@@ -21,7 +26,12 @@ A CLI tool to store and retrieve commands with fuzzy finding using `fzf`. Quickl
 
 ### Install cmdstore
 
-Using `uv` (recommended):
+Using `pipx`:
+```bash
+pipx install cmdstore
+```
+
+or using `uv`:
 ```bash
 uv pip install cmdstore
 ```
@@ -33,7 +43,7 @@ pip install cmdstore
 
 Or install from source:
 ```bash
-git clone <repository-url>
+git clone https://github.com/JakeerC/cmdstore.git
 cd cmdstore
 uv pip install -e .
 ```
