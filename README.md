@@ -153,8 +153,10 @@ cmdstore import --file ~/.fish_history --limit 50
 ```
 
 **Import Options:**
-- `--file`: Path to history file (default: `~/.bash_history`)
-- `--limit`: Number of recent commands to consider (default: 100)
+- `--file`: Path to history file (defaults to config or `~/.bash_history`)
+- `--limit`: Number of recent commands to consider (defaults to config or `100`)
+
+**Note:** If `--file` or `--limit` are not provided, cmdstore will use values from `config.json`. If those are not set, it falls back to the defaults shown above.
 
 ## Configuration
 
@@ -180,6 +182,146 @@ The `--store` flag takes precedence over the persistent default.
 1. `--store` flag (highest priority)
 2. Global config from `~/.cmdstore_config.json`
 3. Default `~/.cmdstore` (lowest priority)
+
+### Local Configuration (`config.json`)
+
+Each store directory contains a `config.json` file that allows you to customize behavior. This file is automatically created with default values when you first use cmdstore.
+
+**Location:** `~/.cmdstore/config.json` (or your configured store path)
+
+#### Configuration Options
+
+The configuration file supports the following options:
+
+```json
+{
+  "fzf": {
+    "preview_width": "50%",
+    "height": "50%",
+    "border_style": "rounded"
+  },
+  "auto_copy": {
+    "enabled": true,
+    "show_notification": true
+  },
+  "defaults": {
+    "tool": "",
+    "tags": [],
+    "description_template": "Imported from history"
+  },
+  "search": {
+    "sort_by": "used_count",
+    "sort_order": "desc",
+    "show_usage_count": true,
+    "group_by_tool": false
+  },
+  "preview": {
+    "show_command": true,
+    "show_description": true,
+    "show_tags": true,
+    "show_tool": true,
+    "show_usage_count": true,
+    "show_created_at": false
+  },
+  "import": {
+    "default_history_file": "~/.bash_history",
+    "default_limit": 100,
+    "auto_add_tags": [],
+    "skip_duplicates": true
+  },
+  "ui": {
+    "colors_enabled": true,
+    "emoji_enabled": true,
+    "compact_mode": false,
+    "confirm_deletion": true
+  }
+}
+```
+
+#### Configuration Sections
+
+**FZF Settings (`fzf`)**
+- `preview_width`: Width of the fzf preview pane (e.g., "50%", "60%")
+- `height`: Height of the fzf interface (e.g., "50%", "80%")
+- `border_style`: Border style for fzf (e.g., "rounded", "sharp")
+
+**Auto-copy Settings (`auto_copy`)**
+- `enabled`: Automatically copy selected commands to clipboard (default: `true`)
+- `show_notification`: Show notification when command is copied (default: `true`)
+
+**Default Metadata (`defaults`)**
+- `tool`: Default tool category for new commands (default: `""`)
+- `tags`: Default tags to apply to new commands (default: `[]`)
+- `description_template`: Template for imported commands (default: `"Imported from history"`)
+
+**Search Settings (`search`)**
+- `sort_by`: Sort commands by `"used_count"`, `"created_at"`, or `"alphabetical"` (default: `"used_count"`)
+- `sort_order`: Sort order `"asc"` or `"desc"` (default: `"desc"`)
+- `show_usage_count`: Show usage count in list view (default: `true`)
+- `group_by_tool`: Group commands by tool in list view (default: `false`)
+
+**Preview Settings (`preview`)**
+- `show_command`: Show command in preview pane (default: `true`)
+- `show_description`: Show description in preview pane (default: `true`)
+- `show_tags`: Show tags in preview pane (default: `true`)
+- `show_tool`: Show tool in preview pane (default: `true`)
+- `show_usage_count`: Show usage count in preview pane (default: `true`)
+- `show_created_at`: Show creation date in preview pane (default: `false`)
+
+**Import Settings (`import`)**
+- `default_history_file`: Default history file path (default: `"~/.bash_history"`)
+- `default_limit`: Default number of commands to import (default: `100`)
+- `auto_add_tags`: Tags to automatically add to imported commands (default: `[]`)
+- `skip_duplicates`: Skip commands that already exist in store (default: `true`)
+
+**UI Settings (`ui`)**
+- `colors_enabled`: Enable colored output (default: `true`)
+- `emoji_enabled`: Enable emoji in output (default: `true`)
+- `compact_mode`: Use compact display mode (default: `false`)
+- `confirm_deletion`: Require confirmation before deleting (default: `true`)
+
+#### Example Customizations
+
+**Customize search sorting:**
+```json
+{
+  "search": {
+    "sort_by": "alphabetical",
+    "sort_order": "asc",
+    "group_by_tool": true
+  }
+}
+```
+
+**Customize import defaults:**
+```json
+{
+  "import": {
+    "default_history_file": "~/.zsh_history",
+    "default_limit": 200,
+    "auto_add_tags": ["imported", "history"]
+  }
+}
+```
+
+**Customize preview display:**
+```json
+{
+  "preview": {
+    "show_created_at": true,
+    "show_usage_count": false
+  }
+}
+```
+
+**Disable deletion confirmation:**
+```json
+{
+  "ui": {
+    "confirm_deletion": false
+  }
+}
+```
 
 ## File Structure
 
@@ -236,6 +378,9 @@ cmdstore delete
 - **History Import**: Regularly import from your shell history to build your command library
 - **Multi-select Delete**: Use `Tab` in fzf to select multiple commands for batch deletion
 - **Preview**: The fzf preview pane shows full command details - use it to verify before selecting
+- **Configuration**: Customize `config.json` to match your workflow - it's automatically created with sensible defaults
+- **Sorting**: Configure search sorting in `config.json` to prioritize frequently used commands or alphabetical order
+- **Import Automation**: Set `auto_add_tags` in config to automatically tag imported commands for easier organization
 
 ## Requirements
 

@@ -17,6 +17,49 @@ from cmdstore.fzf_integration import (
     run_fzf_search,
 )
 
+DEFAULT_CONFIG = {
+    "fzf": {
+        "preview_width": "50%",
+        "height": "50%",
+        "border_style": "rounded",
+    },
+    "auto_copy": {
+        "enabled": True,
+        "show_notification": True,
+    },
+    "defaults": {
+        "tool": "",
+        "tags": [],
+        "description_template": "Imported from history",
+    },
+    "search": {
+        "sort_by": "used_count",
+        "sort_order": "desc",
+        "show_usage_count": True,
+        "group_by_tool": False,
+    },
+    "preview": {
+        "show_command": True,
+        "show_description": True,
+        "show_tags": True,
+        "show_tool": True,
+        "show_usage_count": True,
+        "show_created_at": False,
+    },
+    "import": {
+        "default_history_file": "~/.bash_history",
+        "default_limit": 100,
+        "auto_add_tags": [],
+        "skip_duplicates": True,
+    },
+    "ui": {
+        "colors_enabled": True,
+        "emoji_enabled": True,
+        "compact_mode": False,
+        "confirm_deletion": True,
+    },
+}
+
 
 class CommandStore:
     """Manages command storage and retrieval operations."""
@@ -33,7 +76,7 @@ class CommandStore:
         if not self.store_file.exists():
             self._save_commands([])
         if not self.config_file.exists():
-            self._save_config({})
+            self._save_config(DEFAULT_CONFIG.copy())
 
     def _load_commands(self):
         """Load commands from JSON file"""
@@ -61,9 +104,33 @@ class CommandStore:
         with open(self.config_file, "w") as f:
             json.dump(config, f, indent=2)
 
+    def _deep_merge(self, default, user):
+        """Deep merge user config into default config"""
+        result = default.copy()
+        for key, value in user.items():
+            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+                result[key] = self._deep_merge(result[key], value)
+            else:
+                result[key] = value
+        return result
+
+    def get_config(self):
+        """Get merged configuration with defaults"""
+        user_config = self._load_config()
+        return self._deep_merge(DEFAULT_CONFIG.copy(), user_config)
+
     def add_command(self, command, description="", tags=None, tool=""):
         """Add a new command to the store"""
         commands = self._load_commands()
+        config = self.get_config()
+        
+        defaults_config = config.get("defaults", {})
+        
+        # Use defaults if values are empty
+        if not tool:
+            tool = defaults_config.get("tool", "")
+        if not tags:
+            tags = defaults_config.get("tags", [])
 
         new_cmd = {
             "id": str(uuid.uuid4()),
@@ -83,6 +150,7 @@ class CommandStore:
     def search_commands(self, tool_filter=None, tag_filter=None):
         """Search commands using fzf"""
         commands = self._load_commands()
+        config = self.get_config()
 
         # Filter by tool or tag if specified
         if tool_filter:
@@ -94,12 +162,24 @@ class CommandStore:
             print(style_error("No commands found."))
             return None
 
+        # Apply sorting based on config
+        search_config = config.get("search", {})
+        sort_by = search_config.get("sort_by", "used_count")
+        sort_order = search_config.get("sort_order", "desc")
+        
+        if sort_by == "used_count":
+            commands.sort(key=lambda x: x.get("used_count", 0), reverse=(sort_order == "desc"))
+        elif sort_by == "created_at":
+            commands.sort(key=lambda x: x.get("created_at", ""), reverse=(sort_order == "desc"))
+        elif sort_by == "alphabetical":
+            commands.sort(key=lambda x: x.get("command", "").lower(), reverse=(sort_order == "desc"))
+
         # Format commands for fzf
         fzf_input = format_commands_for_fzf(commands)
 
         # Run fzf with preview
         prompt = f"{Colors.BOLD}{Colors.CYAN}Search » {Colors.RESET}"
-        selected = run_fzf_search(fzf_input, self.store_file, prompt, preview=True)
+        selected = run_fzf_search(fzf_input, self.store_file, prompt, config, preview=True)
 
         if selected is None:
             print(style_error("Error: fzf not found. Please install fzf first."))
@@ -139,6 +219,7 @@ class CommandStore:
     def delete_command(self):
         """Delete one or more commands using fzf multi-select"""
         commands = self._load_commands()
+        config = self.get_config()
 
         if not commands:
             print(style_error("No commands to delete."))
@@ -150,7 +231,7 @@ class CommandStore:
         # Run fzf with multi-select and preview
         prompt = f"{Colors.BOLD}{Colors.RED}Delete (Tab to select multiple) » {Colors.RESET}"
         selected_lines = run_fzf_multi_select_with_preview(
-            fzf_input, self.store_file, prompt, preview=True
+            fzf_input, self.store_file, prompt, config, preview=True
         )
 
         if selected_lines is None:
@@ -194,13 +275,17 @@ class CommandStore:
                 print(f"     {style_prompt('Tags:', Colors.MAGENTA)} {tags}")
             print(f"     {style_prompt('Tool:', Colors.BLUE)} {tool}")
 
-        prompt_text = style_prompt(
-            f"\nDelete {len(commands_to_delete)} command(s)? [Y/n]:", Colors.RED
-        )
-        confirmation = input(f"{prompt_text} ").strip().lower()
-        if confirmation not in ("", "y", "yes"):
-            print(style_info("Deletion cancelled."))
-            return
+        ui_config = config.get("ui", {})
+        confirm_deletion = ui_config.get("confirm_deletion", True)
+        
+        if confirm_deletion:
+            prompt_text = style_prompt(
+                f"\nDelete {len(commands_to_delete)} command(s)? [Y/n]:", Colors.RED
+            )
+            confirmation = input(f"{prompt_text} ").strip().lower()
+            if confirmation not in ("", "y", "yes"):
+                print(style_info("Deletion cancelled."))
+                return
 
         # Remove all selected commands
         commands = [c for c in commands if c["id"] not in cmd_ids]
@@ -210,6 +295,7 @@ class CommandStore:
     def list_commands(self, tool_filter=None):
         """List all commands"""
         commands = self._load_commands()
+        config = self.get_config()
 
         if tool_filter:
             commands = [c for c in commands if c.get("tool") == tool_filter]
@@ -218,21 +304,71 @@ class CommandStore:
             print(style_error("No commands found."))
             return
 
-        for cmd in commands:
-            tool = cmd.get("tool", "general")
-            tags = ", ".join(cmd.get("tags", []))
-            desc = cmd.get("description", "")
-            used = cmd.get("used_count", 0)
+        # Apply sorting based on config
+        search_config = config.get("search", {})
+        sort_by = search_config.get("sort_by", "used_count")
+        sort_order = search_config.get("sort_order", "desc")
+        
+        if sort_by == "used_count":
+            commands.sort(key=lambda x: x.get("used_count", 0), reverse=(sort_order == "desc"))
+        elif sort_by == "created_at":
+            commands.sort(key=lambda x: x.get("created_at", ""), reverse=(sort_order == "desc"))
+        elif sort_by == "alphabetical":
+            commands.sort(key=lambda x: x.get("command", "").lower(), reverse=(sort_order == "desc"))
 
-            print(f"\n[{tool}] {cmd['command']}")
-            if desc:
-                print(f"  Description: {desc}")
-            if tags:
-                print(f"  Tags: {tags}")
-            print(f"  Used: {used} times")
+        # Group by tool if enabled
+        group_by_tool = search_config.get("group_by_tool", False)
+        show_usage_count = search_config.get("show_usage_count", True)
 
-    def import_from_history(self, history_file="~/.bash_history", limit=100):
+        if group_by_tool:
+            # Group commands by tool
+            grouped = {}
+            for cmd in commands:
+                tool = cmd.get("tool", "general")
+                if tool not in grouped:
+                    grouped[tool] = []
+                grouped[tool].append(cmd)
+            
+            for tool in sorted(grouped.keys()):
+                print(f"\n{style_prompt(f'[{tool}]', Colors.BLUE)}")
+                for cmd in grouped[tool]:
+                    tags = ", ".join(cmd.get("tags", []))
+                    desc = cmd.get("description", "")
+                    used = cmd.get("used_count", 0)
+
+                    print(f"  {cmd['command']}")
+                    if desc:
+                        print(f"    Description: {desc}")
+                    if tags:
+                        print(f"    Tags: {tags}")
+                    if show_usage_count:
+                        print(f"    Used: {used} times")
+        else:
+            for cmd in commands:
+                tool = cmd.get("tool", "general")
+                tags = ", ".join(cmd.get("tags", []))
+                desc = cmd.get("description", "")
+                used = cmd.get("used_count", 0)
+
+                print(f"\n[{tool}] {cmd['command']}")
+                if desc:
+                    print(f"  Description: {desc}")
+                if tags:
+                    print(f"  Tags: {tags}")
+                if show_usage_count:
+                    print(f"  Used: {used} times")
+
+    def import_from_history(self, history_file=None, limit=None):
         """Import commands from shell history"""
+        config = self.get_config()
+        import_config = config.get("import", {})
+        
+        # Use config defaults if not provided
+        if history_file is None:
+            history_file = import_config.get("default_history_file", "~/.bash_history")
+        if limit is None:
+            limit = import_config.get("default_limit", 100)
+        
         history_path = Path(history_file).expanduser()
 
         if not history_path.exists():
@@ -248,14 +384,36 @@ class CommandStore:
         print(style_info(f"Found {len(unique_commands)} unique commands from history."))
         print(style_info("Select commands to import (use fzf):"))
 
-        selected = run_fzf_multi_select(unique_commands)
+        selected = run_fzf_multi_select(unique_commands, config)
 
         if selected is None:
             print(style_error("Error: fzf not found."))
             return
 
+        # Get existing commands to check for duplicates
+        existing_commands = self._load_commands()
+        existing_command_texts = {c.get("command", "").strip() for c in existing_commands}
+        
+        defaults_config = config.get("defaults", {})
+        description_template = defaults_config.get("description_template", "Imported from history")
+        auto_add_tags = import_config.get("auto_add_tags", [])
+        skip_duplicates = import_config.get("skip_duplicates", True)
+        
+        imported_count = 0
+        skipped_count = 0
+        
         for cmd in selected:
             cmd = cmd.strip()
             if cmd:
-                self.add_command(cmd, description="Imported from history")
-        print(style_success(f"✓ Imported {len(selected)} commands"))
+                if skip_duplicates and cmd in existing_command_texts:
+                    skipped_count += 1
+                    continue
+                
+                # Use auto_add_tags if configured
+                tags = auto_add_tags.copy() if auto_add_tags else []
+                self.add_command(cmd, description=description_template, tags=tags)
+                imported_count += 1
+        
+        if skipped_count > 0:
+            print(style_info(f"Skipped {skipped_count} duplicate command(s)."))
+        print(style_success(f"✓ Imported {imported_count} commands"))
