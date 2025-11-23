@@ -62,8 +62,12 @@ def main():
 
     # Import from history
     import_parser = subparsers.add_parser("import", help="Import from shell history")
-    import_parser.add_argument("--file", default="~/.bash_history", help="History file path")
-    import_parser.add_argument("--limit", type=int, default=100, help="Number of recent commands")
+    import_parser.add_argument(
+        "--file", default=None, help="History file path (defaults to config or ~/.bash_history)"
+    )
+    import_parser.add_argument(
+        "--limit", type=int, default=None, help="Number of recent commands (defaults to config or 100)"
+    )
 
     args = parser.parse_args()
 
@@ -112,4 +116,5 @@ def main():
     elif args.action == "list":
         store.list_commands(tool_filter=args.tool)
     elif args.action == "import":
+        # Pass None to use config defaults, or use provided values
         store.import_from_history(args.file, args.limit)

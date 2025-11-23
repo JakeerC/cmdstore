@@ -6,85 +6,122 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-FZF_PREVIEW_WIDTH = "50%"
 FZF_PREVIEW_DELIMITER = "║"  # ║ , ■ , ¤ , █
 
 
-def generate_preview_script() -> str:
+def generate_preview_script(config: dict) -> str:
     """Generate the Python script content for fzf preview."""
-    return f"""#!/usr/bin/env python3
-import json
-import sys
-import os
+    preview_config = config.get("preview", {})
+    show_command = preview_config.get("show_command", True)
+    show_description = preview_config.get("show_description", True)
+    show_tags = preview_config.get("show_tags", True)
+    show_tool = preview_config.get("show_tool", True)
+    show_usage_count = preview_config.get("show_usage_count", True)
+    show_created_at = preview_config.get("show_created_at", False)
+    
+    script_lines = [
+        "#!/usr/bin/env python3",
+        "import json",
+        "import sys",
+        "import os",
+        "",
+        "try:",
+        "    store_path = os.environ.get('CMDSTORE_STORE_FILE')",
+        "    if not store_path or not os.path.exists(store_path):",
+        "        print('Error: Store file not found')",
+        "        sys.exit(1)",
+        "",
+        "    with open(store_path) as f:",
+        "        commands = json.load(f)",
+        "",
+        "    selected = sys.argv[1] if len(sys.argv) > 1 else ''",
+        "    if not selected:",
+        "        print('No selection')",
+        "        sys.exit(0)",
+        "",
+        f"    # Parse the selected line: format is \"command {FZF_PREVIEW_DELIMITER} id: <id>\"",
+        f"    delimiter = '{FZF_PREVIEW_DELIMITER}'",
+        "    cmd_id = None",
+        "",
+        "    delimiter_pattern = ' ' + delimiter + ' id: '",
+        "    if delimiter_pattern in selected:",
+        "        cmd_id = selected.split('id: ')[-1].strip()",
+        "    elif 'id: ' in selected:",
+        "        cmd_id = selected.split('id: ')[-1].strip()",
+        "",
+        "    if not cmd_id:",
+        "        print('Error: Could not parse command ID')",
+        "        sys.exit(1)",
+        "",
+        "    cmd = next((c for c in commands if c.get('id') == cmd_id), None)",
+        "    if not cmd:",
+        "        print('Error: Command not found')",
+        "        sys.exit(1)",
+        "",
+        "    # Output formatted command details based on config",
+    ]
+    
+    if show_command:
+        script_lines.extend([
+            "    print('\\033[1m\\033[36mCommand:\\033[0m')",
+            "    print('  ' + cmd.get('command', ''))",
+            "    print()",
+        ])
+    
+    if show_description:
+        script_lines.extend([
+            "    desc = cmd.get('description', '')",
+            "    if desc:",
+            "        print('\\033[1m\\033[33mDescription:\\033[0m')",
+            "        print('  ' + desc)",
+            "        print()",
+        ])
+    
+    if show_tags:
+        script_lines.extend([
+            "    tags = cmd.get('tags', [])",
+            "    if tags:",
+            "        print('\\033[1m\\033[35mTags:\\033[0m')",
+            "        print('  ' + ', '.join(tags))",
+            "        print()",
+        ])
+    
+    if show_tool:
+        script_lines.extend([
+            "    tool = cmd.get('tool', 'general')",
+            "    if tool:",
+            "        print('\\033[1m\\033[34mTool:\\033[0m')",
+            "        print('  ' + tool)",
+            "        print()",
+        ])
+    
+    if show_usage_count:
+        script_lines.extend([
+            "    print('\\033[1m\\033[37mUsed:\\033[0m')",
+            "    print('  ' + str(cmd.get('used_count', 0)) + ' times')",
+        ])
+    
+    if show_created_at:
+        script_lines.extend([
+            "    created_at = cmd.get('created_at', '')",
+            "    if created_at:",
+            "        print('\\033[1m\\033[37mCreated:\\033[0m')",
+            "        print('  ' + created_at)",
+        ])
+    
+    script_lines.extend([
+        "",
+        "except Exception as e:",
+        "    print('Error: ' + str(e))",
+        "    sys.exit(1)",
+    ])
+    
+    return "\n".join(script_lines)
 
-try:
-    store_path = os.environ.get('CMDSTORE_STORE_FILE')
-    if not store_path or not os.path.exists(store_path):
-        print('Error: Store file not found')
-        sys.exit(1)
 
-    with open(store_path) as f:
-        commands = json.load(f)
-
-    selected = sys.argv[1] if len(sys.argv) > 1 else ''
-    if not selected:
-        print('No selection')
-        sys.exit(0)
-
-    # Parse the selected line: format is "command {FZF_PREVIEW_DELIMITER} id: <id>"
-    delimiter = '{FZF_PREVIEW_DELIMITER}'
-    cmd_id = None
-
-    delimiter_pattern = ' ' + delimiter + ' id: '
-    if delimiter_pattern in selected:
-        cmd_id = selected.split('id: ')[-1].strip()
-    elif 'id: ' in selected:
-        cmd_id = selected.split('id: ')[-1].strip()
-
-    if not cmd_id:
-        print('Error: Could not parse command ID')
-        sys.exit(1)
-
-    cmd = next((c for c in commands if c.get('id') == cmd_id), None)
-    if not cmd:
-        print('Error: Command not found')
-        sys.exit(1)
-
-    # Output formatted command details
-    print('\\033[1m\\033[36mCommand:\\033[0m')
-    print('  ' + cmd.get('command', ''))
-    print()
-
-    desc = cmd.get('description', '')
-    if desc:
-        print('\\033[1m\\033[33mDescription:\\033[0m')
-        print('  ' + desc)
-        print()
-
-    tags = cmd.get('tags', [])
-    if tags:
-        print('\\033[1m\\033[35mTags:\\033[0m')
-        print('  ' + ', '.join(tags))
-        print()
-
-    tool = cmd.get('tool', 'general')
-    if tool:
-        print('\\033[1m\\033[34mTool:\\033[0m')
-        print('  ' + tool)
-        print()
-
-    print('\\033[1m\\033[37mUsed:\\033[0m')
-    print('  ' + str(cmd.get('used_count', 0)) + ' times')
-
-except Exception as e:
-    print('Error: ' + str(e))
-    sys.exit(1)
-"""
-
-
-def create_preview_script() -> str:
+def create_preview_script(config: dict) -> str:
     """Create a temporary preview script file and return its path."""
-    preview_script_content = generate_preview_script()
+    preview_script_content = generate_preview_script(config)
     with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
         f.write(preview_script_content)
         preview_script_path = f.name
@@ -109,13 +146,18 @@ def run_fzf_search(
     fzf_input: list[str],
     store_file: Path,
     prompt: str,
+    config: dict,
     preview: bool = True,
 ) -> str | None:
     """Run fzf with the given input and return the selected line."""
     preview_script_path = None
     try:
+        fzf_config = config.get("fzf", {})
+        preview_width = fzf_config.get("preview_width", "50%")
+        height = fzf_config.get("height", "50%")
+        
         if preview:
-            preview_script_path = create_preview_script()
+            preview_script_path = create_preview_script(config)
             preview_script = f"python3 {shlex.quote(preview_script_path)} {{}}"
         else:
             preview_script = None
@@ -124,7 +166,7 @@ def run_fzf_search(
         fzf_cmd = [
             "fzf",
             "--height",
-            FZF_PREVIEW_WIDTH,
+            height,
             "--reverse",
             "--border",
             "--prompt",
@@ -137,7 +179,7 @@ def run_fzf_search(
                     "--preview",
                     preview_script,
                     "--preview-window",
-                    f"right:{FZF_PREVIEW_WIDTH}:border-left",
+                    f"right:{preview_width}:border-left",
                 ]
             )
 
@@ -168,11 +210,14 @@ def run_fzf_search(
                 pass  # Ignore cleanup errors
 
 
-def run_fzf_multi_select(fzf_input: list[str]) -> list[str] | None:
+def run_fzf_multi_select(fzf_input: list[str], config: dict) -> list[str] | None:
     """Run fzf with multi-select and return selected lines."""
     try:
+        fzf_config = config.get("fzf", {})
+        height = fzf_config.get("height", "50%")
+        
         result = subprocess.run(
-            ["fzf", "--multi", "--height", FZF_PREVIEW_WIDTH, "--reverse"],
+            ["fzf", "--multi", "--height", height, "--reverse"],
             input="".join(fzf_input),
             text=True,
             capture_output=True,
@@ -189,13 +234,18 @@ def run_fzf_multi_select_with_preview(
     fzf_input: list[str],
     store_file: Path,
     prompt: str,
+    config: dict,
     preview: bool = True,
 ) -> list[str] | None:
     """Run fzf with multi-select and preview, returning selected lines."""
     preview_script_path = None
     try:
+        fzf_config = config.get("fzf", {})
+        preview_width = fzf_config.get("preview_width", "50%")
+        height = fzf_config.get("height", "50%")
+        
         if preview:
-            preview_script_path = create_preview_script()
+            preview_script_path = create_preview_script(config)
             preview_script = f"python3 {shlex.quote(preview_script_path)} {{}}"
         else:
             preview_script = None
@@ -205,7 +255,7 @@ def run_fzf_multi_select_with_preview(
             "fzf",
             "--multi",
             "--height",
-            FZF_PREVIEW_WIDTH,
+            height,
             "--reverse",
             "--border",
             "--prompt",
@@ -218,7 +268,7 @@ def run_fzf_multi_select_with_preview(
                     "--preview",
                     preview_script,
                     "--preview-window",
-                    f"right:{FZF_PREVIEW_WIDTH}:border-left",
+                    f"right:{preview_width}:border-left",
                 ]
             )
 
