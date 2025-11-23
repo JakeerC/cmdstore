@@ -1,9 +1,20 @@
 [project]
 name = "cmdstore"
-version = "0.3.0"
+version = "0.4.0"
 description = "A CLI tool to store and retrieve commands with fuzzy finding"
 readme = "README.md"
 requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "Jakeer C", email = "jakeer.builds@gmail.com" }]
+keywords = ["cli", "store", "fzf", "developer", "DX"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
 dependencies = ["pyperclip>=1.11.0"]
 
 
