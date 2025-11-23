@@ -18,7 +18,7 @@ def generate_preview_script(config: dict) -> str:
     show_tool = preview_config.get("show_tool", True)
     show_usage_count = preview_config.get("show_usage_count", True)
     show_created_at = preview_config.get("show_created_at", False)
-    
+
     script_lines = [
         "#!/usr/bin/env python3",
         "import json",
@@ -39,7 +39,7 @@ def generate_preview_script(config: dict) -> str:
         "        print('No selection')",
         "        sys.exit(0)",
         "",
-        f"    # Parse the selected line: format is \"command {FZF_PREVIEW_DELIMITER} id: <id>\"",
+        f'    # Parse the selected line: format is "command {FZF_PREVIEW_DELIMITER} id: <id>"',
         f"    delimiter = '{FZF_PREVIEW_DELIMITER}'",
         "    cmd_id = None",
         "",
@@ -60,62 +60,76 @@ def generate_preview_script(config: dict) -> str:
         "",
         "    # Output formatted command details based on config",
     ]
-    
+
     if show_command:
-        script_lines.extend([
-            "    print('\\033[1m\\033[36mCommand:\\033[0m')",
-            "    print('  ' + cmd.get('command', ''))",
-            "    print()",
-        ])
-    
+        script_lines.extend(
+            [
+                "    print('\\033[1m\\033[36mCommand:\\033[0m')",
+                "    print('  ' + cmd.get('command', ''))",
+                "    print()",
+            ]
+        )
+
     if show_description:
-        script_lines.extend([
-            "    desc = cmd.get('description', '')",
-            "    if desc:",
-            "        print('\\033[1m\\033[33mDescription:\\033[0m')",
-            "        print('  ' + desc)",
-            "        print()",
-        ])
-    
+        script_lines.extend(
+            [
+                "    desc = cmd.get('description', '')",
+                "    if desc:",
+                "        print('\\033[1m\\033[33mDescription:\\033[0m')",
+                "        print('  ' + desc)",
+                "        print()",
+            ]
+        )
+
     if show_tags:
-        script_lines.extend([
-            "    tags = cmd.get('tags', [])",
-            "    if tags:",
-            "        print('\\033[1m\\033[35mTags:\\033[0m')",
-            "        print('  ' + ', '.join(tags))",
-            "        print()",
-        ])
-    
+        script_lines.extend(
+            [
+                "    tags = cmd.get('tags', [])",
+                "    if tags:",
+                "        print('\\033[1m\\033[35mTags:\\033[0m')",
+                "        print('  ' + ', '.join(tags))",
+                "        print()",
+            ]
+        )
+
     if show_tool:
-        script_lines.extend([
-            "    tool = cmd.get('tool', 'general')",
-            "    if tool:",
-            "        print('\\033[1m\\033[34mTool:\\033[0m')",
-            "        print('  ' + tool)",
-            "        print()",
-        ])
-    
+        script_lines.extend(
+            [
+                "    tool = cmd.get('tool', 'general')",
+                "    if tool:",
+                "        print('\\033[1m\\033[34mTool:\\033[0m')",
+                "        print('  ' + tool)",
+                "        print()",
+            ]
+        )
+
     if show_usage_count:
-        script_lines.extend([
-            "    print('\\033[1m\\033[37mUsed:\\033[0m')",
-            "    print('  ' + str(cmd.get('used_count', 0)) + ' times')",
-        ])
-    
+        script_lines.extend(
+            [
+                "    print('\\033[1m\\033[37mUsed:\\033[0m')",
+                "    print('  ' + str(cmd.get('used_count', 0)) + ' times')",
+            ]
+        )
+
     if show_created_at:
-        script_lines.extend([
-            "    created_at = cmd.get('created_at', '')",
-            "    if created_at:",
-            "        print('\\033[1m\\033[37mCreated:\\033[0m')",
-            "        print('  ' + created_at)",
-        ])
-    
-    script_lines.extend([
-        "",
-        "except Exception as e:",
-        "    print('Error: ' + str(e))",
-        "    sys.exit(1)",
-    ])
-    
+        script_lines.extend(
+            [
+                "    created_at = cmd.get('created_at', '')",
+                "    if created_at:",
+                "        print('\\033[1m\\033[37mCreated:\\033[0m')",
+                "        print('  ' + created_at)",
+            ]
+        )
+
+    script_lines.extend(
+        [
+            "",
+            "except Exception as e:",
+            "    print('Error: ' + str(e))",
+            "    sys.exit(1)",
+        ]
+    )
+
     return "\n".join(script_lines)
 
 
@@ -155,7 +169,7 @@ def run_fzf_search(
         fzf_config = config.get("fzf", {})
         preview_width = fzf_config.get("preview_width", "50%")
         height = fzf_config.get("height", "50%")
-        
+
         if preview:
             preview_script_path = create_preview_script(config)
             preview_script = f"python3 {shlex.quote(preview_script_path)} {{}}"
@@ -215,7 +229,7 @@ def run_fzf_multi_select(fzf_input: list[str], config: dict) -> list[str] | None
     try:
         fzf_config = config.get("fzf", {})
         height = fzf_config.get("height", "50%")
-        
+
         result = subprocess.run(
             ["fzf", "--multi", "--height", height, "--reverse"],
             input="".join(fzf_input),
@@ -243,7 +257,7 @@ def run_fzf_multi_select_with_preview(
         fzf_config = config.get("fzf", {})
         preview_width = fzf_config.get("preview_width", "50%")
         height = fzf_config.get("height", "50%")
-        
+
         if preview:
             preview_script_path = create_preview_script(config)
             preview_script = f"python3 {shlex.quote(preview_script_path)} {{}}"

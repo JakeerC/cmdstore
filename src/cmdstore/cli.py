@@ -66,7 +66,10 @@ def main():
         "--file", default=None, help="History file path (defaults to config or ~/.bash_history)"
     )
     import_parser.add_argument(
-        "--limit", type=int, default=None, help="Number of recent commands (defaults to config or 100)"
+        "--limit",
+        type=int,
+        default=None,
+        help="Number of recent commands (defaults to config or 100)",
     )
 
     args = parser.parse_args()

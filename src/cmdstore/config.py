@@ -25,4 +25,3 @@ def save_global_store_path(path: str):
     GLOBAL_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(GLOBAL_CONFIG_PATH, "w") as f:
         json.dump({"store": path}, f, indent=2)
-
