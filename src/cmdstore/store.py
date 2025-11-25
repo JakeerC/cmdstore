@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pyperclip
 
+import cmdstore.fallback_ui as fallback_ui
 from cmdstore.colors import Colors, style_error, style_info, style_prompt, style_success
 from cmdstore.fzf_integration import (
     extract_command_from_selection,
@@ -57,6 +58,7 @@ DEFAULT_CONFIG = {
         "emoji_enabled": True,
         "compact_mode": False,
         "confirm_deletion": True,
+        "use_fzf": True,
     },
 }
 
@@ -123,9 +125,9 @@ class CommandStore:
         """Add a new command to the store"""
         commands = self._load_commands()
         config = self.get_config()
-        
+
         defaults_config = config.get("defaults", {})
-        
+
         # Use defaults if values are empty
         if not tool:
             tool = defaults_config.get("tool", "")
@@ -166,41 +168,67 @@ class CommandStore:
         search_config = config.get("search", {})
         sort_by = search_config.get("sort_by", "used_count")
         sort_order = search_config.get("sort_order", "desc")
-        
+
         if sort_by == "used_count":
             commands.sort(key=lambda x: x.get("used_count", 0), reverse=(sort_order == "desc"))
         elif sort_by == "created_at":
             commands.sort(key=lambda x: x.get("created_at", ""), reverse=(sort_order == "desc"))
         elif sort_by == "alphabetical":
-            commands.sort(key=lambda x: x.get("command", "").lower(), reverse=(sort_order == "desc"))
+            commands.sort(
+                key=lambda x: x.get("command", "").lower(), reverse=(sort_order == "desc")
+            )
 
         # Format commands for fzf
         fzf_input = format_commands_for_fzf(commands)
 
         # Run fzf with preview
         prompt = f"{Colors.BOLD}{Colors.CYAN}Search » {Colors.RESET}"
-        selected = run_fzf_search(fzf_input, self.store_file, prompt, config, preview=True)
 
-        if selected is None:
-            print(style_error("Error: fzf not found. Please install fzf first."))
+        # Check if fzf is enabled
+        ui_config = config.get("ui", {})
+        use_fzf = ui_config.get("use_fzf", True)
+
+        if use_fzf:
+            try:
+                selected = run_fzf_search(fzf_input, self.store_file, prompt, config, preview=True)
+
+                if selected is None:
+                    # User cancelled fzf
+                    return None
+
+                # Extract ID from the selected line
+                cmd_id = extract_command_id(selected)
+
+                if cmd_id:
+                    self._increment_usage(cmd_id)
+                    # Get the full command from store to ensure we have the complete command
+                    commands = self._load_commands()
+                    full_cmd = next((c for c in commands if c["id"] == cmd_id), None)
+                    if full_cmd:  # noqa: SIM108
+                        command = full_cmd["command"]
+                    else:
+                        # Fallback: if command not found, extract from selection
+                        command = extract_command_from_selection(selected)
+                else:
+                    # Fallback: if no ID found, use the whole selection
+                    command = selected
+
+                # Copy to clipboard
+                pyperclip.copy(command)
+                print(style_success(f"✓ Copied to clipboard: {command}"))
+                return command
+
+            except FileNotFoundError:
+                # FZF not found, fall through to fallback UI
+                pass
+
+        # Fallback UI
+        selected_item = fallback_ui.select_item(commands, prompt_text="Search")
+        if not selected_item:
             return None
 
-        # Extract ID from the selected line
-        cmd_id = extract_command_id(selected)
-
-        if cmd_id:
-            self._increment_usage(cmd_id)
-            # Get the full command from store to ensure we have the complete command
-            commands = self._load_commands()
-            full_cmd = next((c for c in commands if c["id"] == cmd_id), None)
-            if full_cmd:  # noqa: SIM108
-                command = full_cmd["command"]
-            else:
-                # Fallback: if command not found, extract from selection
-                command = extract_command_from_selection(selected)
-        else:
-            # Fallback: if no ID found, use the whole selection
-            command = selected
+        command = selected_item["command"]
+        self._increment_usage(selected_item["id"])
 
         # Copy to clipboard
         pyperclip.copy(command)
@@ -230,28 +258,50 @@ class CommandStore:
 
         # Run fzf with multi-select and preview
         prompt = f"{Colors.BOLD}{Colors.RED}Delete (Tab to select multiple) » {Colors.RESET}"
-        selected_lines = run_fzf_multi_select_with_preview(
-            fzf_input, self.store_file, prompt, config, preview=True
-        )
 
-        if selected_lines is None:
-            print(style_error("Error: fzf not found."))
-            return
+        # Check if fzf is enabled
+        ui_config = config.get("ui", {})
+        use_fzf = ui_config.get("use_fzf", True)
 
-        if not selected_lines:
-            print(style_info("No commands selected. Deletion cancelled."))
-            return
-
-        # Extract command IDs from selected lines
         cmd_ids = []
-        for selected in selected_lines:
-            cmd_id = extract_command_id(selected)
-            if cmd_id:
-                cmd_ids.append(cmd_id)
 
-        if not cmd_ids:
-            print(style_error("Could not parse command IDs from selection."))
-            return
+        if use_fzf:
+            try:
+                selected_lines = run_fzf_multi_select_with_preview(
+                    fzf_input, self.store_file, prompt, config, preview=True
+                )
+
+                if selected_lines is None:
+                    # User cancelled or fzf failed (but not missing)
+                    return
+
+                if not selected_lines:
+                    print(style_info("No commands selected. Deletion cancelled."))
+                    return
+
+                # Extract command IDs from selected lines
+                for selected in selected_lines:
+                    cmd_id = extract_command_id(selected)
+                    if cmd_id:
+                        cmd_ids.append(cmd_id)
+
+                if not cmd_ids:
+                    print(style_error("Could not parse command IDs from selection."))
+                    return
+
+            except FileNotFoundError:
+                # FZF not found, fall through to fallback UI
+                use_fzf = False
+
+        if not use_fzf:
+            # Fallback UI
+            selected_items = fallback_ui.multi_select_items(
+                commands, prompt_text="Select commands to delete"
+            )
+            if not selected_items:
+                return
+
+            cmd_ids = [item["id"] for item in selected_items]
 
         # Get commands to delete
         commands_to_delete = [c for c in commands if c["id"] in cmd_ids]
@@ -277,7 +327,7 @@ class CommandStore:
 
         ui_config = config.get("ui", {})
         confirm_deletion = ui_config.get("confirm_deletion", True)
-        
+
         if confirm_deletion:
             prompt_text = style_prompt(
                 f"\nDelete {len(commands_to_delete)} command(s)? [Y/n]:", Colors.RED
@@ -308,13 +358,15 @@ class CommandStore:
         search_config = config.get("search", {})
         sort_by = search_config.get("sort_by", "used_count")
         sort_order = search_config.get("sort_order", "desc")
-        
+
         if sort_by == "used_count":
             commands.sort(key=lambda x: x.get("used_count", 0), reverse=(sort_order == "desc"))
         elif sort_by == "created_at":
             commands.sort(key=lambda x: x.get("created_at", ""), reverse=(sort_order == "desc"))
         elif sort_by == "alphabetical":
-            commands.sort(key=lambda x: x.get("command", "").lower(), reverse=(sort_order == "desc"))
+            commands.sort(
+                key=lambda x: x.get("command", "").lower(), reverse=(sort_order == "desc")
+            )
 
         # Group by tool if enabled
         group_by_tool = search_config.get("group_by_tool", False)
@@ -328,7 +380,7 @@ class CommandStore:
                 if tool not in grouped:
                     grouped[tool] = []
                 grouped[tool].append(cmd)
-            
+
             for tool in sorted(grouped.keys()):
                 print(f"\n{style_prompt(f'[{tool}]', Colors.BLUE)}")
                 for cmd in grouped[tool]:
@@ -362,13 +414,13 @@ class CommandStore:
         """Import commands from shell history"""
         config = self.get_config()
         import_config = config.get("import", {})
-        
+
         # Use config defaults if not provided
         if history_file is None:
             history_file = import_config.get("default_history_file", "~/.bash_history")
         if limit is None:
             limit = import_config.get("default_limit", 100)
-        
+
         history_path = Path(history_file).expanduser()
 
         if not history_path.exists():
@@ -384,36 +436,45 @@ class CommandStore:
         print(style_info(f"Found {len(unique_commands)} unique commands from history."))
         print(style_info("Select commands to import (use fzf):"))
 
-        selected = run_fzf_multi_select(unique_commands, config)
+        print(style_info("Select commands to import (use fzf):"))
 
-        if selected is None:
-            print(style_error("Error: fzf not found."))
-            return
+        try:
+            selected = run_fzf_multi_select(unique_commands, config)
+            if selected is None:
+                # User cancelled
+                return
+        except FileNotFoundError:
+            # FZF not found, use fallback UI
+            selected = fallback_ui.multi_select_items(
+                unique_commands, prompt_text="Select commands to import"
+            )
+            if not selected:
+                return
 
         # Get existing commands to check for duplicates
         existing_commands = self._load_commands()
         existing_command_texts = {c.get("command", "").strip() for c in existing_commands}
-        
+
         defaults_config = config.get("defaults", {})
         description_template = defaults_config.get("description_template", "Imported from history")
         auto_add_tags = import_config.get("auto_add_tags", [])
         skip_duplicates = import_config.get("skip_duplicates", True)
-        
+
         imported_count = 0
         skipped_count = 0
-        
+
         for cmd in selected:
             cmd = cmd.strip()
             if cmd:
                 if skip_duplicates and cmd in existing_command_texts:
                     skipped_count += 1
                     continue
-                
+
                 # Use auto_add_tags if configured
                 tags = auto_add_tags.copy() if auto_add_tags else []
                 self.add_command(cmd, description=description_template, tags=tags)
                 imported_count += 1
-        
+
         if skipped_count > 0:
             print(style_info(f"Skipped {skipped_count} duplicate command(s)."))
         print(style_success(f"✓ Imported {imported_count} commands"))
