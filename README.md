@@ -9,7 +9,7 @@ A CLI tool to store and retrieve commands with fuzzy finding using `fzf`. Quickl
 
 ## Features
 
-- 🎯 **Fuzzy Search**: Interactive command search with `fzf` and live preview
+- 🎯 **Fuzzy Search**: Interactive command search with `fzf` and live preview (with fallback UI if fzf is missing)
 - 📋 **Auto-copy**: Selected commands are automatically copied to clipboard
 - 🏷️ **Metadata**: Organize commands with descriptions, tags, and tool categories
 - 📊 **Usage Tracking**: Commands track how many times they've been used
@@ -233,7 +233,8 @@ The configuration file supports the following options:
     "colors_enabled": true,
     "emoji_enabled": true,
     "compact_mode": false,
-    "confirm_deletion": true
+    "confirm_deletion": true,
+    "use_fzf": true
   }
 }
 ```
@@ -279,6 +280,7 @@ The configuration file supports the following options:
 - `emoji_enabled`: Enable emoji in output (default: `true`)
 - `compact_mode`: Use compact display mode (default: `false`)
 - `confirm_deletion`: Require confirmation before deleting (default: `true`)
+- `use_fzf`: Enable fzf integration. Set to `false` to force using the fallback UI (default: `true`)
 
 #### Example Customizations
 
