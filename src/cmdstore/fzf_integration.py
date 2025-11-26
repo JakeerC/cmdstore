@@ -212,8 +212,6 @@ def run_fzf_search(
         if result.returncode == 0:
             return result.stdout.strip()
         return None
-    except FileNotFoundError:
-        return None
     finally:
         # Clean up temporary preview script file
         if preview_script_path:
@@ -226,22 +224,19 @@ def run_fzf_search(
 
 def run_fzf_multi_select(fzf_input: list[str], config: dict) -> list[str] | None:
     """Run fzf with multi-select and return selected lines."""
-    try:
-        fzf_config = config.get("fzf", {})
-        height = fzf_config.get("height", "50%")
+    fzf_config = config.get("fzf", {})
+    height = fzf_config.get("height", "50%")
 
-        result = subprocess.run(
-            ["fzf", "--multi", "--height", height, "--reverse"],
-            input="".join(fzf_input),
-            text=True,
-            capture_output=True,
-        )
+    result = subprocess.run(
+        ["fzf", "--multi", "--height", height, "--reverse"],
+        input="".join(fzf_input),
+        text=True,
+        capture_output=True,
+    )
 
-        if result.returncode == 0:
-            return result.stdout.strip().split("\n")
-        return None
-    except FileNotFoundError:
-        return None
+    if result.returncode == 0:
+        return result.stdout.strip().split("\n")
+    return None
 
 
 def run_fzf_multi_select_with_preview(
@@ -304,8 +299,7 @@ def run_fzf_multi_select_with_preview(
                 return selected_lines.split("\n")
             return []
         return None
-    except FileNotFoundError:
-        return None
+
     finally:
         # Clean up temporary preview script file
         if preview_script_path:
