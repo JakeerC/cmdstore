@@ -1,10 +1,12 @@
 """Command-line interface for cmdstore."""
 
 import argparse
+import sys
 from importlib.metadata import PackageNotFoundError, version
 
 from cmdstore.colors import Colors, style_error, style_info, style_prompt, style_success
 from cmdstore.config import load_global_store_path, save_global_store_path
+from cmdstore.errors import CmdstoreError
 from cmdstore.store import CommandStore
 
 try:
@@ -74,50 +76,54 @@ def main():
 
     args = parser.parse_args()
 
-    # Handle --set-store as a special case that doesn't require an action
-    if args.set_store:
-        save_global_store_path(args.set_store)
-        print(style_success(f"✓ Default store path set to: {args.set_store}"))
-        return  # Exit early after setting the store path
+    try:
+        # Handle --set-store as a special case that doesn't require an action
+        if args.set_store:
+            save_global_store_path(args.set_store)
+            print(style_success(f"✓ Default store path set to: {args.set_store}"))
+            return  # Exit early after setting the store path
 
-    # If no action provided and --set-store wasn't used, show error
-    if not args.action:
-        parser.error("the following arguments are required: action")
+        # If no action provided and --set-store wasn't used, show error
+        if not args.action:
+            parser.error("the following arguments are required: action")
 
-    # Determine effective store path
-    effective_store = args.store or load_global_store_path() or "~/.cmdstore"
+        # Determine effective store path
+        effective_store = args.store or load_global_store_path() or "~/.cmdstore"
 
-    store = CommandStore(store_path=effective_store)
+        store = CommandStore(store_path=effective_store)
 
-    if args.action == "add":
-        command = args.cmd
-        description = args.description
-        tags = args.tags
-        tool = args.tool
+        if args.action == "add":
+            command = args.cmd
+            description = args.description
+            tags = args.tags
+            tool = args.tool
 
-        if not command:
-            print(style_info("Enter command details (leave blank to skip optional fields):"))
-            while True:
-                command = input(f"{style_prompt('Command:', Colors.CYAN)} ").strip()
-                if command:
-                    break
-                print(style_error("Command is required."))
-            if not description:
-                description = input(f"{style_prompt('Description:', Colors.YELLOW)} ").strip()
-            if not tags:
-                prompt_text = style_prompt("Tags (comma-separated):", Colors.MAGENTA)
-                tags_input = input(f"{prompt_text} ").strip()
-                tags = [tag.strip() for tag in tags_input.split(",") if tag.strip()]
-            if not tool:
-                tool = input(f"{style_prompt('Tool:', Colors.BLUE)} ").strip()
+            if not command:
+                print(style_info("Enter command details (leave blank to skip optional fields):"))
+                while True:
+                    command = input(f"{style_prompt('Command:', Colors.CYAN)} ").strip()
+                    if command:
+                        break
+                    print(style_error("Command is required."))
+                if not description:
+                    description = input(f"{style_prompt('Description:', Colors.YELLOW)} ").strip()
+                if not tags:
+                    prompt_text = style_prompt("Tags (comma-separated):", Colors.MAGENTA)
+                    tags_input = input(f"{prompt_text} ").strip()
+                    tags = [tag.strip() for tag in tags_input.split(",") if tag.strip()]
+                if not tool:
+                    tool = input(f"{style_prompt('Tool:', Colors.BLUE)} ").strip()
 
-        store.add_command(command, description, tags, tool)
-    elif args.action == "search":
-        store.search_commands(tool_filter=args.tool, tag_filter=args.tag)
-    elif args.action == "delete":
-        store.delete_command()
-    elif args.action == "list":
-        store.list_commands(tool_filter=args.tool)
-    elif args.action == "import":
-        # Pass None to use config defaults, or use provided values
-        store.import_from_history(args.file, args.limit)
+            store.add_command(command, description, tags, tool)
+        elif args.action == "search":
+            store.search_commands(tool_filter=args.tool, tag_filter=args.tag)
+        elif args.action == "delete":
+            store.delete_command()
+        elif args.action == "list":
+            store.list_commands(tool_filter=args.tool)
+        elif args.action == "import":
+            # Pass None to use config defaults, or use provided values
+            store.import_from_history(args.file, args.limit)
+    except CmdstoreError as e:
+        print(style_error(f"Error: {e}"))
+        sys.exit(1)

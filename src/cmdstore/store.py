@@ -1,6 +1,6 @@
 """Core command storage operations."""
 
-import json
+import copy
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -16,6 +16,12 @@ from cmdstore.fzf_integration import (
     run_fzf_multi_select,
     run_fzf_multi_select_with_preview,
     run_fzf_search,
+)
+from cmdstore.storage import (
+    atomic_save_json,
+    load_json_file,
+    validate_commands,
+    validate_config,
 )
 
 DEFAULT_CONFIG = {
@@ -77,49 +83,46 @@ class CommandStore:
         self.store_path.mkdir(parents=True, exist_ok=True)
         if not self.store_file.exists():
             self._save_commands([])
+        else:
+            self._load_commands()
+
         if not self.config_file.exists():
-            self._save_config(DEFAULT_CONFIG.copy())
+            self._save_config(copy.deepcopy(DEFAULT_CONFIG))
+        else:
+            self._load_config()
 
     def _load_commands(self):
         """Load commands from JSON file"""
-        try:
-            with open(self.store_file) as f:
-                return json.load(f)
-        except json.JSONDecodeError:
-            return []
+        data = load_json_file(self.store_file, expected_type=list)
+        return validate_commands(data, path=self.store_file)
 
     def _save_commands(self, commands):
         """Save commands to JSON file"""
-        with open(self.store_file, "w") as f:
-            json.dump(commands, f, indent=2)
+        atomic_save_json(self.store_file, commands, indent=2)
 
     def _load_config(self):
         """Load configuration"""
-        try:
-            with open(self.config_file) as f:
-                return json.load(f)
-        except json.JSONDecodeError:
-            return {}
+        data = load_json_file(self.config_file, expected_type=dict)
+        return validate_config(data, path=self.config_file)
 
     def _save_config(self, config):
         """Save configuration"""
-        with open(self.config_file, "w") as f:
-            json.dump(config, f, indent=2)
+        atomic_save_json(self.config_file, config, indent=2)
 
     def _deep_merge(self, default, user):
         """Deep merge user config into default config"""
-        result = default.copy()
+        result = copy.deepcopy(default)
         for key, value in user.items():
             if key in result and isinstance(result[key], dict) and isinstance(value, dict):
                 result[key] = self._deep_merge(result[key], value)
             else:
-                result[key] = value
+                result[key] = copy.deepcopy(value)
         return result
 
     def get_config(self):
         """Get merged configuration with defaults"""
         user_config = self._load_config()
-        return self._deep_merge(DEFAULT_CONFIG.copy(), user_config)
+        return self._deep_merge(DEFAULT_CONFIG, user_config)
 
     def add_command(self, command, description="", tags=None, tool=""):
         """Add a new command to the store"""
@@ -200,7 +203,6 @@ class CommandStore:
                 cmd_id = extract_command_id(selected)
 
                 if cmd_id:
-                    self._increment_usage(cmd_id)
                     # Get the full command from store to ensure we have the complete command
                     commands = self._load_commands()
                     full_cmd = next((c for c in commands if c["id"] == cmd_id), None)
@@ -213,10 +215,7 @@ class CommandStore:
                     # Fallback: if no ID found, use the whole selection
                     command = selected
 
-                # Copy to clipboard
-                pyperclip.copy(command)
-                print(style_success(f"✓ Copied to clipboard: {command}"))
-                return command
+                return self._handle_command_selection(command, cmd_id)
 
             except FileNotFoundError:
                 # FZF not found, fall through to fallback UI
@@ -228,11 +227,26 @@ class CommandStore:
             return None
 
         command = selected_item["command"]
-        self._increment_usage(selected_item["id"])
+        return self._handle_command_selection(command, selected_item.get("id"))
 
-        # Copy to clipboard
-        pyperclip.copy(command)
-        print(style_success(f"✓ Copied to clipboard: {command}"))
+    def _handle_command_selection(self, command: str, cmd_id: str | None = None) -> str:
+        """Centralize post-selection usage increment, clipboard copy, and notifications."""
+        if cmd_id:
+            self._increment_usage(cmd_id)
+
+        config = self.get_config()
+        auto_copy_config = config.get("auto_copy", {})
+        enabled = auto_copy_config.get("enabled", True)
+        show_notification = auto_copy_config.get("show_notification", True)
+
+        if enabled:
+            try:
+                pyperclip.copy(command)
+                if show_notification:
+                    print(style_success(f"✓ Copied to clipboard: {command}"))
+            except Exception as e:
+                print(style_error(f"Clipboard unavailable ({e}). Command: {command}"))
+
         return command
 
     def _increment_usage(self, cmd_id):
@@ -434,8 +448,6 @@ class CommandStore:
         unique_commands = list(dict.fromkeys(lines[-limit:]))
 
         print(style_info(f"Found {len(unique_commands)} unique commands from history."))
-        print(style_info("Select commands to import (use fzf):"))
-
         print(style_info("Select commands to import (use fzf):"))
 
         try:

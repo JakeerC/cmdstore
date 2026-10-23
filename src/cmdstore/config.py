@@ -1,27 +1,24 @@
 """Configuration management for global store path settings."""
 
-import json
 from pathlib import Path
+
+from cmdstore.storage import atomic_save_json, load_json_file
 
 GLOBAL_CONFIG_PATH = Path("~/.cmdstore_config.json").expanduser()
 
 
-def load_global_store_path():
+def load_global_store_path(config_path: Path | None = None) -> str | None:
     """Load the globally configured default store path, if any."""
-    if GLOBAL_CONFIG_PATH.exists():
-        try:
-            with open(GLOBAL_CONFIG_PATH) as f:
-                cfg = json.load(f)
-            store = cfg.get("store")
-            if isinstance(store, str) and store.strip():
-                return store
-        except json.JSONDecodeError:
-            return None
+    path = config_path or GLOBAL_CONFIG_PATH
+    if path.exists():
+        cfg = load_json_file(path, expected_type=dict)
+        store = cfg.get("store")
+        if isinstance(store, str) and store.strip():
+            return store.strip()
     return None
 
 
-def save_global_store_path(path: str):
+def save_global_store_path(path: str, config_path: Path | None = None) -> None:
     """Persistently set the global default store path."""
-    GLOBAL_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with open(GLOBAL_CONFIG_PATH, "w") as f:
-        json.dump({"store": path}, f, indent=2)
+    target_path = config_path or GLOBAL_CONFIG_PATH
+    atomic_save_json(target_path, {"store": path}, indent=2)

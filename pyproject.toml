@@ -35,7 +35,7 @@ select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
 exclude = [".venv", "__pycache__", "migrations"]
 
 # Format imports automatically
-[tool.ruff.isort]
+[tool.ruff.lint.isort]
 known-first-party = ["src"]
 combine-as-imports = true
 
@@ -47,4 +47,8 @@ skip-magic-trailing-comma = false
 docstring-code-format = true
 
 [dependency-groups]
-dev = ["twine>=6.2.0"]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.9.0",
+    "twine>=6.2.0",
+]
