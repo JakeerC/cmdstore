@@ -6,6 +6,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from cmdstore.errors import FzfError
+
 FZF_PREVIEW_DELIMITER = "║"  # ║ , ■ , ¤ , █
 
 
@@ -210,8 +212,15 @@ def run_fzf_search(
         )
 
         if result.returncode == 0:
-            return result.stdout.strip()
-        return None
+            output = result.stdout.strip()
+            return output if output else None
+        if result.returncode in (1, 130):
+            return None
+        raise FzfError(
+            f"fzf search failed with exit code {result.returncode}: {result.stderr.strip()}",
+            returncode=result.returncode,
+            stderr=result.stderr,
+        )
     finally:
         # Clean up temporary preview script file
         if preview_script_path:
@@ -229,14 +238,20 @@ def run_fzf_multi_select(fzf_input: list[str], config: dict) -> list[str] | None
 
     result = subprocess.run(
         ["fzf", "--multi", "--height", height, "--reverse"],
-        input="".join(fzf_input),
+        input="\n".join(fzf_input),
         text=True,
         capture_output=True,
     )
 
     if result.returncode == 0:
-        return result.stdout.strip().split("\n")
-    return None
+        return result.stdout.splitlines()
+    if result.returncode in (1, 130):
+        return None
+    raise FzfError(
+        f"fzf multi-select failed with exit code {result.returncode}: {result.stderr.strip()}",
+        returncode=result.returncode,
+        stderr=result.stderr,
+    )
 
 
 def run_fzf_multi_select_with_preview(
@@ -294,11 +309,14 @@ def run_fzf_multi_select_with_preview(
         )
 
         if result.returncode == 0:
-            selected_lines = result.stdout.strip()
-            if selected_lines:
-                return selected_lines.split("\n")
-            return []
-        return None
+            return result.stdout.splitlines()
+        if result.returncode in (1, 130):
+            return None
+        raise FzfError(
+            f"fzf multi-select failed with exit code {result.returncode}: {result.stderr.strip()}",
+            returncode=result.returncode,
+            stderr=result.stderr,
+        )
 
     finally:
         # Clean up temporary preview script file
@@ -312,8 +330,10 @@ def run_fzf_multi_select_with_preview(
 
 def extract_command_id(selected_line: str) -> str | None:
     """Extract command ID from fzf selected line."""
+    if f" {FZF_PREVIEW_DELIMITER} id: " in selected_line:
+        return selected_line.rsplit(f" {FZF_PREVIEW_DELIMITER} id: ", 1)[-1].strip()
     if "id: " in selected_line:
-        return selected_line.split("id: ")[-1].strip()
+        return selected_line.rsplit("id: ", 1)[-1].strip()
     return None
 
 

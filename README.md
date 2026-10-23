@@ -384,10 +384,61 @@ cmdstore delete
 - **Sorting**: Configure search sorting in `config.json` to prioritize frequently used commands or alphabetical order
 - **Import Automation**: Set `auto_add_tags` in config to automatically tag imported commands for easier organization
 
+## Troubleshooting & Data Recovery
+
+### Malformed Store Recovery
+
+`cmdstore` uses atomic writes to prevent partial files during interrupted writes. If an existing `commands.json` or `config.json` becomes malformed or structurally invalid, `cmdstore` halts immediately with an actionable error rather than treating corruption as an empty store. The corrupt file is preserved untouched.
+
+To manually recover:
+
+1. **Locate the affected file**: The error message indicates the exact path (typically `~/.cmdstore/commands.json` or `~/.cmdstore/config.json`).
+2. **Back up the corrupt file**:
+   ```bash
+   cp ~/.cmdstore/commands.json ~/.cmdstore/commands.json.bak
+   ```
+3. **Repair or restore**: Open the file in an editor or JSON tool to fix the syntax error, or restore from a known-good backup.
+4. **Verify**: Run `cmdstore list` to confirm the store loads successfully.
+
+### Clipboard Diagnostics
+
+When `auto_copy.enabled` is `true`, `cmdstore` copies the selected command to your clipboard. If your environment lacks a clipboard provider (e.g., in a minimal headless server or remote SSH session without X11/Wayland forwarding), `cmdstore` prints an informative warning showing the command text directly on stdout. The selection and usage count tracking remain valid. You can disable automatic clipboard access anytime by setting `"auto_copy": {"enabled": false}` in `~/.cmdstore/config.json`.
+
+### Fallback Mode
+
+If `fzf` is not installed on your system or `"ui": {"use_fzf": false}` is configured, `cmdstore` provides a numbered fallback interface for selection, multi-selection, and deletion. Note that each record is represented as one line.
+
+## Development & Quality Checks
+
+Contributors can run the test suite and release checks locally using `uv`:
+
+```bash
+# Sync dependencies from lockfile
+uv sync --dev --locked
+
+# Lint and check code style
+uv run ruff check .
+
+# Run automated tests
+uv run pytest -q
+
+# Verify compilation
+uv run python -m compileall -q src
+
+# Build source distribution and wheel
+uv build
+
+# Smoke check CLI entry points
+uv run cmdstore --help
+uv run cmdstore --version
+```
+
+CI automatically executes these checks across Python 3.12 and 3.13 on every push and pull request.
+
 ## Requirements
 
 - Python 3.12+
-- `fzf` (fuzzy finder)
+- `fzf` (fuzzy finder, optional - interactive fallback available)
 - `pyperclip` (automatically installed as dependency)
 
 ## License
@@ -398,4 +449,10 @@ Copyright (c) 2025 Jakeer
 
 ## Contributing
 
-[Add contribution guidelines here]
+Pull requests and issues are welcome! Please ensure all development quality checks pass before submitting a PR:
+
+```bash
+uv sync --dev --locked
+uv run ruff check .
+uv run pytest -q
+```
